@@ -81,6 +81,10 @@ export class Jtt808LocationReportData extends Jtt808ProtocolData {
   #extra0XF6?: Buffer;
   #extra0XF7?: Buffer;
   #extra0XF8?: Buffer;
+
+  // ADAS and DSM active-safety alarm payloads
+  #adasAlarmData?: Buffer;
+  #dsmAlarmData?: Buffer;
   
   #gnssExtraData?: GNSSExtraData;
 
@@ -207,8 +211,7 @@ export class Jtt808LocationReportData extends Jtt808ProtocolData {
           // milleage: 4 bytes *single
           // byte 0-3: total mileage
           // TODO what is 1/10 km
-          this.#totalMilleage =
-            unescapedRawData.readUInt32BE(bytePointer + 2) * 10; // 4 bytes
+          this.#totalMilleage = unescapedRawData.readUInt32BE(bytePointer + 2) * 10; // 4 bytes
           break;
         case 0x30:
           // mobile signal strength: 1 byte
@@ -366,6 +369,23 @@ export class Jtt808LocationReportData extends Jtt808ProtocolData {
           }
           this.#gnssExtraData = gnssExtraData;
           break;
+
+        case 0x64:
+          // ADAS alarm information
+          this.#adasAlarmData = unescapedRawData.subarray(
+            bytePointer + 2,
+            bytePointer + 2 + extraLength
+          );
+          break;
+
+        case 0x65:
+          // DSM alarm information
+          this.#dsmAlarmData = unescapedRawData.subarray(
+            bytePointer + 2,
+            bytePointer + 2 + extraLength
+          );
+          break;
+
       }
 
       bytePointer += 2 + extraLength;
@@ -579,6 +599,14 @@ export class Jtt808LocationReportData extends Jtt808ProtocolData {
     return this.#gnssExtraData;
   }
 
+  get adasAlarmData() {
+    return this.#adasAlarmData;
+  }
+
+  get dsmAlarmData() {
+    return this.#dsmAlarmData;
+  }
+
   toJSON() {
     return {
       ...super.toJSON(),
@@ -613,6 +641,8 @@ export class Jtt808LocationReportData extends Jtt808ProtocolData {
       extra0XF6: this.extra0XF6,
       extra0XF7: this.extra0XF7,
       extra0XF8: this.extra0XF8,
+      adasAlarmData: this.adasAlarmData?.toString("hex"),
+      dsmAlarmData: this.dsmAlarmData?.toString("hex"),
       gnssExtraData: this.gnssExtraData ? {
         positionAge: this.gnssExtraData.positionAge,
         accOnDuration: this.gnssExtraData.accOnDuration,
