@@ -9,26 +9,26 @@ server
     console.log(`Connected: ${socket.remoteAddress}:${socket.remotePort}`)
   )
   .on("raw_data", (chunk) => console.log("Raw:", chunk.toString("hex")))
-  .on("data", (data) => console.log("Data:", data.toJSON()))
-  .on("message", ({ socket, data }) => {
-    const messageId = data.readUInt16BE(1);
+  //.on("data", (data) => console.log("Data:", data.toJSON()))
+  .on("message", ({ socket, chunk }) => {
+    const messageId = chunk.readUInt16BE(1);
     switch (messageId) {
       case 0x0100: {
         // Terminal registration request
-        const response = server.sendRegisterResponse(data);
+        const response = server.sendRegisterResponse(chunk);
         socket.write(response);
         break;
       }
       case 0x0102: {
         // Terminal authentication request
-        const response = server.sendGeneralResponse(data);
+        const response = server.sendGeneralResponse(chunk);
         socket.write(response);
         break;
       }
 
       case 0x0002 : {
         // Terminal heartbeat request
-        const response = server.sendGeneralResponse(data);
+        const response = server.sendGeneralResponse(chunk);
         socket.write(response);
         break;
       }

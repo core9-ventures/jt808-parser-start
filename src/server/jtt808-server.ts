@@ -150,7 +150,7 @@ export class Jtt808Server {
    * @param eventName Event Name
    * @param listener Event Listener
    */
-  on(eventName: "message", listener: (event: { socket: net.Socket; data: Buffer }) => void): Jtt808Server;
+  on(eventName: "message", listener: (event: { socket: net.Socket; chunk: Buffer }) => void): Jtt808Server;
   on(eventName: 'start', listener: (port: number) => void): Jtt808Server;
   on(eventName: 'connection', listener: (socket: net.Socket) => void): Jtt808Server;
   on(eventName: 'raw_data', listener: (chunk: Buffer) => void): Jtt808Server;
