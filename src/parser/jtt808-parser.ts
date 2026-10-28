@@ -22,6 +22,10 @@ export class Jtt808ProtocolParser {
     // get message id
     let protocolData: Jtt808ProtocolData;
     const messageId = buffer.readUInt16BE(1);
+    console.log(
+      "JT808 message ID:",
+      `0x${messageId.toString(16).padStart(4, "0")}`,
+    );
     switch(messageId) {
       case 0x0001:
       case 0x0002:
