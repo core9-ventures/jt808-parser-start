@@ -21,7 +21,7 @@ export function unescapeJtt808Buffer(original: Buffer) {
         // skip extra byte
         i += 1;
       } else if(byte2 === 0x02) {
-        arrBuffer.push(0x7E);
+        arrBuffer.push(0x7F);
         // skip extra byte
         i += 1;
       } else {

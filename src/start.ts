@@ -10,10 +10,48 @@ server
   )
   .on("raw_data", (chunk) => console.log("Raw:", chunk.toString("hex")))
   .on("data", (data) => console.log("Data:", data.toJSON()))
+  .on("message", ({ socket, data }) => {
+    const messageId = data.readUInt16BE(1);
+    switch (messageId) {
+      case 0x0100: {
+        // Terminal registration request
+        const response = server.sendRegisterResponse(data);
+        socket.write(response);
+        break;
+      }
+      case 0x0102: {
+        // Terminal authentication request
+        const response = server.sendGeneralResponse(data);
+        socket.write(response);
+        break;
+      }
+
+      case 0x0002 : {
+        // Terminal heartbeat request
+        const response = server.sendGeneralResponse(data);
+        socket.write(response);
+        break;
+      }
+
+      case 0x0001: {
+        // Terminal general response
+        console.log("Terminal acknowledged a server message");
+        break;
+      }
+
+      default: {
+        console.log("Received message:", messageId);
+        break;
+      }
+    }
+  })
+
+
   .on("data_error", (err) => console.error("Data error:", err.message))
   .on("error", (err) => console.error("Socket error:", err.message))
   .on("disconnected", () => console.log("Disconnected"))
   .on("close", () => console.log("Server closed"));
+  
 
 server.listen(port);
 
