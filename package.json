@@ -1,0 +1,37 @@
+{
+  "name": "@chan1sook/jtt808-server",
+  "version": "0.0.12",
+  "description": "JT/T808 Server",
+  "main": "./dist/main.js",
+  "types": "./types/main.d.ts",
+  "scripts": {
+    "start": "npm run build && node dist/start.js",
+    "dev": "tsx watch src/start.ts",
+    "test": "node tests/run.js",
+    "build": "tsc",
+    "publish": "npm run build && npm publish --access public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chan1sook/jt808-server.git"
+  },
+  "keywords": [
+    "jt/t808",
+    "jt808"
+  ],
+  "author": "Natthawat Raocharoensinp",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/chan1sook/jt808-server/issues"
+  },
+  "homepage": "https://github.com/chan1sook/jt808-server#readme",
+  "devDependencies": {
+    "@tsconfig/node-lts": "^24.0.1",
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
