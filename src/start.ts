@@ -10,9 +10,10 @@ server
   )
   .on("raw_data", (chunk) => console.log("Raw:", chunk.toString("hex")))
   .on("data", (data) => {
-    if(data.messageType !== 0x0200) {
-      console.log("Data:", data.toJSON())
-    } 
+    // if(data.messageType !== 0x0200) {
+    //   console.log("Data:", data.toJSON())
+    // } 
+    console.log("Data:", data.toJSON())
   }) 
   .on("message", ({ socket, chunk }) => {
     const messageId = chunk.readUInt16BE(1);
