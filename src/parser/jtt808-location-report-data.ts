@@ -83,9 +83,9 @@ export class Jtt808LocationReportData extends Jtt808ProtocolData {
   #extra0XF8?: Buffer;
 
   // ADAS and DSM active-safety alarm payloads
-  #adasAlarmData?: Buffer;
-  #dsmAlarmData?: Buffer;
-  
+  #adasAlarm?: any;
+  #dsmAlarm?: any;
+
   #gnssExtraData?: GNSSExtraData;
 
   constructor(rawData: Buffer) {
@@ -203,192 +203,199 @@ export class Jtt808LocationReportData extends Jtt808ProtocolData {
     let bytePointer = 41;
     let bytePointer2: number;
     let bitmask;
+
+
+    const ADAS_STATES = ["unavailable", "start", "end"];
+
+    const ADAS_TYPES: Record<number, string> = {
+      1: "forward collision",
+      2: "lane departure",
+      3: "following too close",
+      4: "pedestrian collision",
+      5: "frequent lane change",
+      6: "road sign limit exceeded",
+      7: "obstacle",
+      16: "road sign recognition",
+      17: "active capture",
+    };
+
+    const DEPARTURE_TYPES: Record<number, string> = {
+      1: "left",
+      2: "right",
+    };
+
+    interface AdasAlarm {
+      alarmId: number;
+      state: string | number;
+      type: string;
+      typeCode: number;
+      level: number;
+      frontVehicleSpeedKmh: number;
+      frontDistance: number;
+      departureType: string | number;
+      roadSignType: number;
+      roadSignData: number;
+      speedKmh: number;
+      altitude: number;
+      latitude: number;
+      longitude: number;
+      time: string;
+      vehicleStatus: number;
+      identifier: {
+        terminalId: string;
+        time: string;
+        sequenceNo: number;
+        attachmentCount: number;
+      };
+    }
+
+    /**
+     * Parses additional item 0x64 (ADAS / forward camera alarm).
+     * 2013 format: 47 bytes. 2019 format: 71 bytes (longer terminal ID and reserved field).
+     */
+    function parseAdasAlarm(value: Buffer, is2019 = false): AdasAlarm {
+      const terminalIdLength = is2019 ? 30 : 7;
+      const identifierStart = 31;
+      const typeCode = value[5];
+
+      return {
+        alarmId: value.readUInt32BE(0),
+        state: ADAS_STATES[value[4]] ?? value[4],
+        type: ADAS_TYPES[typeCode] ?? `user-defined (${typeCode})`,
+        typeCode,
+        level: value[6],
+        frontVehicleSpeedKmh: value[7],
+        frontDistance: value[8],                       // time gap in 100 ms units
+        departureType: DEPARTURE_TYPES[value[9]] ?? value[9],
+        roadSignType: value[10],
+        roadSignData: value[11],
+        speedKmh: value[12],
+        altitude: value.readUInt16BE(13),
+        latitude: value.readUInt32BE(15) / 1e6,
+        longitude: value.readUInt32BE(19) / 1e6,
+        time: bcdTime(value.subarray(23, 29)),
+        vehicleStatus: value.readUInt16BE(29),
+        identifier: {
+          terminalId: value
+            .subarray(identifierStart, identifierStart + terminalIdLength)
+            .toString("ascii")
+            .replace(/\0/g, ""),
+          time: bcdTime(value.subarray(identifierStart + terminalIdLength, identifierStart + terminalIdLength + 6)),
+          sequenceNo: value[identifierStart + terminalIdLength + 6],
+          attachmentCount: value[identifierStart + terminalIdLength + 7],
+        },
+      };
+    }
+
+    const DSM_TYPES: Record<number, string> = {
+      1: "fatigue driving",
+      2: "phone call",
+      3: "smoking",
+      4: "distracted driving",
+      5: "driver abnormal",
+      6: "camera blocked",
+      8: "overtime driving",
+      10: "seatbelt not fastened",
+      11: "IR-blocking sunglasses",
+      12: "both hands off wheel",
+      13: "playing with phone",
+      16: "automatic capture",
+      17: "driver change",
+    };
+
+    interface DsmAlarm {
+      alarmId: number;
+      state: string | number;
+      type: string;
+      typeCode: number;
+      level: number;
+      fatigueDegree: number;
+      speedKmh: number;
+      altitude: number;
+      latitude: number;
+      longitude: number;
+      time: string;
+      vehicleStatus: number;
+      identifier: {
+        terminalId: string;
+        time: string;
+        sequenceNo: number;
+        attachmentCount: number;
+      };
+    }
+    /** Converts 6 BCD bytes (YYMMDDHHMMSS) to "20YY-MM-DD HH:MM:SS" */
+    function bcdTime(bytes: Buffer): string {
+      const s = bytes.toString("hex");
+      return `20${s.slice(0, 2)}-${s.slice(2, 4)}-${s.slice(4, 6)} ${s.slice(6, 8)}:${s.slice(8, 10)}:${s.slice(10, 12)}`;
+    }
+
+    const DSM_STATES = ["unavailable", "start", "end"];
+
+    /**
+     * Parses additional item 0x65 (DSM / driver monitoring alarm).
+     * 2013 format: 47 bytes. 2019 format: 71 bytes (longer terminal ID and reserved field).
+     */
+    function parseDsmAlarm(value: Buffer, is2019 = false): DsmAlarm {
+      const terminalIdLength = is2019 ? 30 : 7;
+      const identifierStart = 31;
+      const typeCode = value[5];
+
+      return {
+        alarmId: value.readUInt32BE(0),
+        state: DSM_STATES[value[4]] ?? value[4],
+        type: DSM_TYPES[typeCode] ?? `user-defined (${typeCode})`,
+        typeCode,
+        level: value[6],
+        fatigueDegree: value[7],
+        // bytes 8–11: reserved
+        speedKmh: value[12],
+        altitude: value.readUInt16BE(13),
+        latitude: value.readUInt32BE(15) / 1e6,
+        longitude: value.readUInt32BE(19) / 1e6,
+        time: bcdTime(value.subarray(23, 29)),
+        vehicleStatus: value.readUInt16BE(29),
+        identifier: {
+          terminalId: value
+            .subarray(identifierStart, identifierStart + terminalIdLength)
+            .toString("ascii")
+            .replace(/\0/g, ""),
+          time: bcdTime(value.subarray(identifierStart + terminalIdLength, identifierStart + terminalIdLength + 6)),
+          sequenceNo: value[identifierStart + terminalIdLength + 6],
+          attachmentCount: value[identifierStart + terminalIdLength + 7],
+        },
+      };
+    }
+
+
+
+
+
     while (bytePointer < unescapedRawData.length - 2) {
-      const header = unescapedRawData.readUInt8(bytePointer);
-      const extraLength = unescapedRawData.readUInt8(bytePointer + 1);
-      switch (header) {
+      //const header = unescapedRawData.readUInt8(bytePointer);
+      //const extraLength = unescapedRawData.readUInt8(bytePointer + 1);
+
+      const id = unescapedRawData.readUInt8(bytePointer);
+      const length = unescapedRawData.readUInt8(bytePointer + 1);
+      const value = unescapedRawData.subarray(bytePointer + 2, bytePointer + 2 + length);
+
+      switch (id) {
         case 0x01:
-          // milleage: 4 bytes *single
-          // byte 0-3: total mileage
-          // TODO what is 1/10 km
-          this.#totalMilleage = unescapedRawData.readUInt32BE(bytePointer + 2) * 10; // 4 bytes
+          this.#totalMilleage = value.readUInt32BE(0) / 10;
           break;
         case 0x30:
-          // mobile signal strength: 1 byte
-          // byte 0: signal strength
-          this.#mobileSignalStrength = unescapedRawData.readUInt8(
-            bytePointer + 2
-          );
+          this.#mobileSignalStrength = value.readUInt8(0);
           break;
-        case 0xf0:
-          // stationData: 13m byte
-          this.#baseStationDataArr = [];
-          bytePointer2 = bytePointer + 2;
-          while (bytePointer2 < bytePointer + 2 + extraLength) {
-            const stationData: BaseStationData = {
-              MCC: unescapedRawData.readUInt16BE(bytePointer2),
-              MNC: unescapedRawData.readUInt16BE(bytePointer2 + 2),
-              CI: unescapedRawData.readUInt32BE(bytePointer2 + 4),
-              LAC: unescapedRawData.readUInt32BE(bytePointer2 + 8),
-              RSSI: unescapedRawData.readUInt8(bytePointer2 + 12),
-            };
-            this.#baseStationDataArr.push(stationData);
-            bytePointer2 += 13;
-          }
-          break;
-        case 0xf1:
-          // power supply: 4 bytes
-          // byte 0-3: power supply in mv
-          this.#powerSupplyMv = unescapedRawData.readUInt32BE(bytePointer + 2);
-          break;
-        case 0xf2:
-          // software version: n bytes
-          // byte 0-n: software version string
-          this.#softwareVersion = unescapedRawData
-            .subarray(bytePointer + 2, extraLength)
-            .toString();
-          break;
-        case 0xf3:
-          // bluetoothData: 1 + varaints bytes
-          this.#bluetoothDataArr = [];
-          // byte 0: bitmask
-          bitmask = unescapedRawData.readUInt8(bytePointer + 2);
-          bytePointer2 = bytePointer + 3;
-          while (bytePointer2 < bytePointer + 2 + extraLength) {
-            // byte 1-n: Data
-            // 1st 6 bytes: mac (required)
-            // 2nd 1 byte: rssi (required)
-            const bluetoothData: BluetoothData = {
-              macAddress: unescapedRawData
-                .subarray(bytePointer2 + 1, 6)
-                .toString("hex"),
-              rssi: unescapedRawData.readInt8(bytePointer2 + 7),
-            };
-            bytePointer2 += 8;
-
-            // {optional; defined from bitmask byte}
-            // 3rd 10 bytes: name (optional 0)
-            if (bitmask & 0b00000001) {
-              bluetoothData.deviceName = unescapedRawData
-                .subarray(bytePointer2, 10)
-                .toString();
-              bytePointer2 += 10;
-            }
-            // 4th 2 bytes: fwVersion (optional 1)
-            if (bitmask & 0b00000010) {
-              bluetoothData.firmwareVersion = readBcdBE(
-                unescapedRawData,
-                bytePointer2,
-                2
-              );
-              bytePointer2 += 2;
-            }
-            // 5th 2 bytes: voltage (optional 2)
-            if (bitmask & 0b00000100) {
-              bluetoothData.voltage =
-                unescapedRawData.readUInt16BE(bytePointer2);
-              bytePointer2 += 2;
-            }
-            // TODO unit conversion
-            // 6th 2 bytes: temperature (optional 3)
-            if (bitmask & 0b00001000) {
-              bluetoothData.temperature =
-                unescapedRawData.readInt16BE(bytePointer2);
-              bytePointer2 += 2;
-            }
-            // TODO unit conversion
-            // 7th 2 bytes: humidity (optional 4)
-            if (bitmask & 0b00010000) {
-              bluetoothData.humidity =
-                unescapedRawData.readInt16BE(bytePointer2);
-              bytePointer2 += 2;
-            }
-            // TODO what sensor, unit conversion
-            // 8th 6 bytes: sensorXYZ (optional 5)
-            if (bitmask & 0b00100000) {
-              bluetoothData.sensorXYZ = {
-                x: unescapedRawData.readInt16BE(bytePointer2),
-                y: unescapedRawData.readInt16BE(bytePointer2 + 2),
-                z: unescapedRawData.readInt16BE(bytePointer2 + 4),
-              };
-              bytePointer2 += 6;
-            }
-            // 9th 2 bytes: Reserved (optional 6)
-            // 10th 2 bytes: Reserved (optional 7)
-            this.#bluetoothDataArr.push(bluetoothData);
-          }
-          break;
-        case 0xf4:
-          // wifi data: 7m bytes
-          this.#wifiDataArr = [];
-          bytePointer2 = bytePointer + 2;
-          while (bytePointer2 < bytePointer + 2 + extraLength) {
-            const wifiData: WifiData = {
-              macAddress: unescapedRawData
-                .subarray(bytePointer2, 6)
-                .toString("hex"),
-              rssi: unescapedRawData.readInt8(bytePointer2 + 6),
-            };
-            this.#wifiDataArr.push(wifiData);
-            bytePointer2 += 7;
-          }
-          break;
-        case 0xf5:
-          this.#extra0XF5 = unescapedRawData.subarray(bytePointer + 2, extraLength);
-          break;
-        case 0xf6:
-          this.#extra0XF6 = unescapedRawData.subarray(bytePointer + 2, extraLength);
-          break;
-        case 0xf7:
-          this.#extra0XF7 = unescapedRawData.subarray(bytePointer + 2, extraLength);
-          break;
-        case 0xf8:
-          this.#extra0XF8 = unescapedRawData.subarray(bytePointer + 2, extraLength);
-          break;
-        case 0xf9:
-          // Parse GNSS Data: 2+variant bytes
-          const gnssExtraData: GNSSExtraData = {};
-          // byte 0-1: bitmask
-          bitmask = unescapedRawData.readUInt16BE(bytePointer + 2);
-          bytePointer2 = bytePointer + 4;
-          if(bitmask & 0x0001) {
-            gnssExtraData.positionAge = unescapedRawData.readUInt32BE(bytePointer2);
-            bytePointer2 += 4;
-          }
-          if(bitmask & 0x0002) {
-            gnssExtraData.accOnDuration = unescapedRawData.readUInt32BE(bytePointer2);
-            bytePointer2 += 4;
-          }
-          if(bitmask & 0x0004) {
-            gnssExtraData.HDOP = unescapedRawData.readUInt16BE(bytePointer2);
-            bytePointer2 += 2;
-          }
-          if(bitmask & 0x0008) {
-            gnssExtraData.time = unescapedRawData.subarray(bytePointer2, 6);
-            bytePointer2 += 6;
-          }
-          this.#gnssExtraData = gnssExtraData;
-          break;
-
         case 0x64:
-          // ADAS alarm information
-          this.#adasAlarmData = unescapedRawData.subarray(
-            bytePointer + 2,
-            bytePointer + 2 + extraLength
-          );
+          this.#adasAlarm = parseAdasAlarm(value);
           break;
-
         case 0x65:
-          // DSM alarm information
-          this.#dsmAlarmData = unescapedRawData.subarray(
-            bytePointer + 2,
-            bytePointer + 2 + extraLength
-          );
+          this.#dsmAlarm = parseDsmAlarm(value);
           break;
-
+        // ...other cases, always reading from `value` at offset 0
       }
 
-      bytePointer += 2 + extraLength;
+
+      bytePointer += 2 + length;
     }
   }
 
@@ -600,55 +607,55 @@ export class Jtt808LocationReportData extends Jtt808ProtocolData {
   }
 
   get adasAlarmData() {
-    return this.#adasAlarmData;
+    return this.#adasAlarm;
   }
 
   get dsmAlarmData() {
-    return this.#dsmAlarmData;
+    return this.#dsmAlarm;
   }
 
   toJSON() {
     return {
       ...super.toJSON(),
-      isOverspeed: this.isOverspeed,
-      isGNSSFault: this.isGNSSFault,
-      isUnderVoltage: this.isUnderVoltage,
-      isPowerOff: this.isPowerOff,
-      isVibrationAlarm: this.isVibrationAlarm,
-      isIllegalDisplacement: this.isIllegalDisplacement,
-      isACCOn: this.isACCOn,
-      isGNSSPositionFixed: this.isGNSSPositionFixed,
-      isVG300BlindDataMode: this.isVG300BlindDataMode,
-      isIdleSpeed: this.isIdleSpeed,
-      isFuelDisconnected: this.isFuelDisconnected,
-      networkType: this.networkType,
-      isTOWData: this.isTOWData,
-      isBufferedData: this.isBufferedData,
-      latitude: this.latitude,
-      longitude: this.longitude,
-      altitudeMeter: this.altitudeMeter,
-      speedKmHr: this.speedKmHr,
-      directionDeg: this.directionDeg,
-      timestamp: this.timestamp,
+      // isOverspeed: this.isOverspeed,
+      // isGNSSFault: this.isGNSSFault,
+      // isUnderVoltage: this.isUnderVoltage,
+      // isPowerOff: this.isPowerOff,
+      // isVibrationAlarm: this.isVibrationAlarm,
+      // isIllegalDisplacement: this.isIllegalDisplacement,
+      // isACCOn: this.isACCOn,
+      // isGNSSPositionFixed: this.isGNSSPositionFixed,
+      // isVG300BlindDataMode: this.isVG300BlindDataMode,
+      // isIdleSpeed: this.isIdleSpeed,
+      // isFuelDisconnected: this.isFuelDisconnected,
+      // networkType: this.networkType,
+      // isTOWData: this.isTOWData,
+      // isBufferedData: this.isBufferedData,
+      // latitude: this.latitude,
+      // longitude: this.longitude,
+      // altitudeMeter: this.altitudeMeter,
+      // speedKmHr: this.speedKmHr,
+      // directionDeg: this.directionDeg,
+      // timestamp: this.timestamp,
       totalMilleage: this.totalMilleage,
       mobileSignalStrength: this.mobileSignalStrength,
-      baseStationDataArr: this.baseStationDataArr,
-      powerSupplyMv: this.powerSupplyMv,
-      softwareVersion: this.softwareVersion,
-      bluetoothDataArr: this.bluetoothDataArr,
-      wifiDataArr: this.wifiDataArr,
-      extra0XF5: this.extra0XF5,
-      extra0XF6: this.extra0XF6,
-      extra0XF7: this.extra0XF7,
-      extra0XF8: this.extra0XF8,
-      adasAlarmData: this.adasAlarmData?.toString("hex"),
-      dsmAlarmData: this.dsmAlarmData?.toString("hex"),
-      gnssExtraData: this.gnssExtraData ? {
-        positionAge: this.gnssExtraData.positionAge,
-        accOnDuration: this.gnssExtraData.accOnDuration,
-        HDOP: this.gnssExtraData.HDOP,
-        time: this.gnssExtraData.time?.toString("hex"),
-      } : undefined,
+      // baseStationDataArr: this.baseStationDataArr,
+      // powerSupplyMv: this.powerSupplyMv,
+      // softwareVersion: this.softwareVersion,
+      // bluetoothDataArr: this.bluetoothDataArr,
+      // wifiDataArr: this.wifiDataArr,
+      // extra0XF5: this.extra0XF5,
+      // extra0XF6: this.extra0XF6,
+      // extra0XF7: this.extra0XF7,
+      // extra0XF8: this.extra0XF8,
+      adasAlarmData: this.adasAlarmData,
+      dsmAlarmData: this.dsmAlarmData,
+      // gnssExtraData: this.gnssExtraData ? {
+      //   positionAge: this.gnssExtraData.positionAge,
+      //   accOnDuration: this.gnssExtraData.accOnDuration,
+      //   HDOP: this.gnssExtraData.HDOP,
+      //   time: this.gnssExtraData.time?.toString("hex"),
+      // } : undefined,
     };
   }
 }
