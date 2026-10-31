@@ -72,3 +72,26 @@ export function inspectLocation(payload: Buffer) {
     offset += 2 + length;
   }
 }
+
+
+export function parseAttributes(payload: Buffer) {
+  const is2019 = (payload.readUInt16BE(2) & 0x4000) !== 0;
+  const body = payload.subarray(is2019 ? 17 : 12);
+  let offset = 2; // skip terminal type (2 bytes)
+
+  const read = (length: number) => {
+    const value = body.subarray(offset, offset + length);
+    offset += length;
+    return value;
+  };
+  const text = (length: number) => read(length).toString("ascii").replace(/\0/g, "").trim();
+
+  return {
+    manufacturer: text(5),
+    model: text(is2019 ? 30 : 20),
+    terminalId: text(is2019 ? 30 : 7),
+    iccid: read(10).toString("hex"),
+    hardware: text(body[offset++]),
+    firmware: text(body[offset++]),
+  };
+}

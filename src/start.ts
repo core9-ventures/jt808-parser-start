@@ -1,5 +1,6 @@
+import type { Socket } from "net";
 import { Jtt808Server } from "./main";
-import { extractPayloads } from "./parser/jt808-frame";
+import { extractPayloads, parseAttributes } from "./parser/jt808-frame";
 
 const port = 7618;
 const server = new Jtt808Server();
@@ -20,6 +21,9 @@ function buildReply(payload: Buffer): Buffer | null {
       return server.sendGeneralResponse(payload); // auth, heartbeat, location, etc.
   }
 }
+
+const queried = new WeakSet<Socket>();
+
 
 server
   .on("start", (port) => console.log(`JT/T808 server listening on port ${port}`))
@@ -70,8 +74,20 @@ server
   // })
   .on("message", ({ socket, chunk }) => {
     for (const payload of extractPayloads(chunk)) {
+      
+      if (payload.readUInt16BE(0) === 0x0107) {
+        console.log("Device attributes:", parseAttributes(payload));
+        continue; // it's a response, don't acknowledge it
+      }
+      
       const reply = buildReply(payload);
       if (reply) socket.write(reply);
+
+      if (!queried.has(socket)) {
+        queried.add(socket);
+        socket.write(server.buildQueryAttributes(payload));
+      }
+      
     }
   })
   .on("data_error", (err) => console.error("Data error:", err.message))

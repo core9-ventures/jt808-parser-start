@@ -37,6 +37,22 @@ export class Jtt808Server {
     return this.serverSequence;
   }
 
+  buildQueryAttributes(request: Buffer): Buffer {
+    const is2019 = (request.readUInt16BE(2) & 0x4000) !== 0;
+    const phoneOffset = is2019 ? 5 : 4;
+    const phoneLength = is2019 ? 10 : 6;
+    const serialOffset = phoneOffset + phoneLength;
+
+    const header = Buffer.alloc(serialOffset + 2);
+    header.writeUInt16BE(0x8107, 0);
+    header.writeUInt16BE(is2019 ? 0x4000 : 0, 2);   // body length 0
+    if (is2019) header[4] = request[4];             // protocol version
+    request.copy(header, phoneOffset, phoneOffset, serialOffset); // device phone
+    header.writeUInt16BE(this.nextSeq(), serialOffset);
+
+    return this.buildPacket(header);
+  }
+
   sendGeneralResponse(buffer: Buffer, result = 0): Buffer {
     // Original request header
     const requestMessageId = buffer.readUInt16BE(0);
