@@ -43,3 +43,32 @@ export function extractPayloads(chunk: Buffer): Buffer[] {
 
   return payloads;
 }
+
+
+const DSM_ITEM = 0x65;
+const DSM_EVENTS: Record<number, string> = {
+  0x01: "fatigue", 0x02: "phone", 0x03: "smoking", 0x04: "distraction", 0x05: "driver abnormal",
+};
+
+export function inspectLocation(payload: Buffer) {
+  const is2019 = (payload.readUInt16BE(2) & 0x4000) !== 0;
+  const body = payload.subarray(is2019 ? 17 : 12);
+
+  const alarmFlags = body.readUInt32BE(0);
+  if (alarmFlags & (1 << 2)) console.log("Alarm bit: fatigue driving");
+  if (alarmFlags & (1 << 14)) console.log("Alarm bit: fatigue warning");
+
+  // Additional info items start after the 28-byte basic block
+  for (let offset = 28; offset + 2 <= body.length; ) {
+    const id = body[offset];
+    const length = body[offset + 1];
+    const value = body.subarray(offset + 2, offset + 2 + length);
+
+    if (id === DSM_ITEM) {
+      const event = value[5];
+      console.log(`DSM alert: ${DSM_EVENTS[event] ?? "type 0x" + event.toString(16)}`, value.toString("hex"));
+    }
+
+    offset += 2 + length;
+  }
+}

@@ -1,5 +1,6 @@
 import { Jtt808LocationReportData } from "../main";
 import { formatHex } from "../utils/utils";
+import { inspectLocation } from "./jt808-frame";
 import { Jtt808ProtocolData } from "./jtt808-protocol-data";
 
 export class Jtt808InvalidDataError extends Error {
@@ -36,6 +37,7 @@ export class Jtt808ProtocolParser {
         break;
       case 0x0200:
         console.log('----Location Report Data----');
+        inspectLocation(buffer)
         protocolData = new Jtt808LocationReportData(buffer);
         break;
       case 0x0900:
