@@ -234,30 +234,71 @@ export class Jtt808Server {
     });
   }
 
+  // _onConnection(socket: net.Socket) {
+  //   this.#event.emit("connection", socket);
+  //   socket.on("data", (chunk: Buffer) => {
+  //     this.#event.emit("raw_data", chunk);
+  //     try {
+  //       const data = this.#parser.parse(chunk);
+  //       this.#event.emit("message", {
+  //         socket,
+  //         chunk,
+  //       });
+  //       this.#event.emit("data", data);
+  //     } catch (err) {
+  //       this.#event.emit("data_error", err);
+  //     }
+  //   });
+
+  //   socket.on("end", () => {
+  //     this.#event.emit("disconnected", socket);
+  //   });
+
+  //   socket.on("error", (err) => {
+  //     this.#event.emit("error", err);
+  //   });
+  // }
+
   _onConnection(socket: net.Socket) {
     this.#event.emit("connection", socket);
+    let pending = Buffer.alloc(0);
+
     socket.on("data", (chunk: Buffer) => {
       this.#event.emit("raw_data", chunk);
-      try {
-        const data = this.#parser.parse(chunk);
-        this.#event.emit("message", {
-          socket,
-          chunk,
-        });
-        this.#event.emit("data", data);
-      } catch (err) {
-        this.#event.emit("data_error", err);
+      pending = Buffer.concat([pending, chunk]);
+
+      let start: number;
+      while ((start = pending.indexOf(0x7e)) !== -1) {
+        const end = pending.indexOf(0x7e, start + 1);
+        if (end === -1) {
+          pending = pending.subarray(start); // incomplete frame: wait for the rest
+          return;
+        }
+
+        if (end - start - 1 < 13) {
+          pending = pending.subarray(end);   // stray 7e: treat it as the next frame's start
+          continue;
+        }
+
+        const frame = pending.subarray(start, end + 1);
+        pending = pending.subarray(end + 1);
+
+        this.#event.emit("message", { socket, chunk: frame });
+        try {
+          this.#event.emit("data", this.#parser.parse(frame));
+        } catch (err) {
+          console.error("Parse failed:", (err as Error).message, frame.toString("hex"));
+          this.#event.emit("data_error", err as Error);
+        }
       }
+
+      pending = Buffer.alloc(0); // no 7e left: discard garbage (e.g. stray HTTP)
     });
 
-    socket.on("end", () => {
-      this.#event.emit("disconnected", socket);
-    });
-
-    socket.on("error", (err) => {
-      this.#event.emit("error", err);
-    });
+    socket.on("end", () => this.#event.emit("disconnected", socket));
+    socket.on("error", (err) => this.#event.emit("error", err));
   }
+
 
   _onClose() {
     this.#event.emit("close");
