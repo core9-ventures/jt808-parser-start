@@ -386,9 +386,11 @@ export class Jtt808LocationReportData extends Jtt808ProtocolData {
           this.#mobileSignalStrength = value.readUInt8(0);
           break;
         case 0x64:
+          console.log("ADAS alarm data:", value.toString("hex"));
           this.#adasAlarm = parseAdasAlarm(value);
           break;
         case 0x65:
+          console.log("DSM alarm data:", value.toString("hex"));
           this.#dsmAlarm = parseDsmAlarm(value);
           break;
         // ...other cases, always reading from `value` at offset 0
