@@ -1,7 +1,25 @@
 import { Jtt808Server } from "./main";
+import { extractPayloads } from "./parser/jt808-frame";
 
 const port = 7618;
 const server = new Jtt808Server();
+
+const MessageId = {
+  TERMINAL_RESPONSE: 0x0001,
+  REGISTER: 0x0100,
+} as const;
+
+/** Builds the reply for a payload, or null if no reply is needed */
+function buildReply(payload: Buffer): Buffer | null {
+  switch (payload.readUInt16BE(0)) {
+    case MessageId.TERMINAL_RESPONSE:
+      return null; // never acknowledge an acknowledgement
+    case MessageId.REGISTER:
+      return server.sendRegisterResponse(payload);
+    default:
+      return server.sendGeneralResponse(payload); // auth, heartbeat, location, etc.
+  }
+}
 
 server
   .on("start", (port) => console.log(`JT/T808 server listening on port ${port}`))
@@ -15,43 +33,47 @@ server
     // } 
     console.log("Data:", data.toJSON())
   }) 
+  // .on("message", ({ socket, chunk }) => {
+  //   const messageId = chunk.readUInt16BE(1);
+  //   switch (messageId) {
+  //     case 0x0100: {
+  //       // Terminal registration request
+  //       const response = server.sendRegisterResponse(chunk);
+  //       socket.write(response);
+  //       break;
+  //     }
+  //     case 0x0102: {
+  //       // Terminal authentication request
+  //       const response = server.sendGeneralResponse(chunk);
+  //       socket.write(response);
+  //       break;
+  //     }
+
+  //     case 0x0002 : {
+  //       // Terminal heartbeat request
+  //       const response = server.sendGeneralResponse(chunk);
+  //       socket.write(response);
+  //       break;
+  //     }
+
+  //     case 0x0001: {
+  //       // Terminal general response
+  //       console.log("Terminal acknowledged a server message");
+  //       break;
+  //     }
+
+  //     default: {
+  //       console.log("Received message:", messageId);
+  //       break;
+  //     }
+  //   }
+  // })
   .on("message", ({ socket, chunk }) => {
-    const messageId = chunk.readUInt16BE(1);
-    switch (messageId) {
-      case 0x0100: {
-        // Terminal registration request
-        const response = server.sendRegisterResponse(chunk);
-        socket.write(response);
-        break;
-      }
-      case 0x0102: {
-        // Terminal authentication request
-        const response = server.sendGeneralResponse(chunk);
-        socket.write(response);
-        break;
-      }
-
-      case 0x0002 : {
-        // Terminal heartbeat request
-        const response = server.sendGeneralResponse(chunk);
-        socket.write(response);
-        break;
-      }
-
-      case 0x0001: {
-        // Terminal general response
-        console.log("Terminal acknowledged a server message");
-        break;
-      }
-
-      default: {
-        console.log("Received message:", messageId);
-        break;
-      }
+    for (const payload of extractPayloads(chunk)) {
+      const reply = buildReply(payload);
+      if (reply) socket.write(reply);
     }
   })
-
-
   .on("data_error", (err) => console.error("Data error:", err.message))
   .on("error", (err) => console.error("Socket error:", err.message))
   .on("disconnected", () => console.log("Disconnected"))
